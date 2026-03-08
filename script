@@ -1,139 +1,128 @@
-############################################################
-# Single-cell RNA-seq Analysis of Breast Cancer Dataset
-# Dataset: GSE131907
-# Tool: Seurat
-############################################################
-
-# ==============================
-# 1. Load Libraries
-# ==============================
+########################################
+# 1. Load libraries
+########################################
 
 library(Seurat)
-library(ggplot2)
 library(dplyr)
-library(patchwork)
+library(ggplot2)
 
-# ==============================
-# 2. Load Data
-# ==============================
+########################################
+# 2. Load scRNA-seq dataset
+########################################
 
-data_dir <- "data/GSE131907/"
+data <- Read10X(data.dir = "filtered_feature_bc_matrix")
 
-breast.data <- Read10X(data.dir = data_dir)
+counts <- data$`Gene Expression`
 
-breast <- CreateSeuratObject(
-  counts = breast.data,
+seurat_obj <- CreateSeuratObject(
+  counts = counts,
   project = "BreastCancer_scRNA",
   min.cells = 3,
   min.features = 200
 )
 
-# ==============================
-# 3. Calculate Mitochondrial Percentage
-# ==============================
+########################################
+# 3. Quality Control (QC)
+########################################
 
-breast[["percent.mt"]] <- PercentageFeatureSet(breast, pattern = "^MT-")
-
-# ==============================
-# 4. Quality Control Visualization
-# ==============================
+seurat_obj[["percent.mt"]] <- PercentageFeatureSet(
+  seurat_obj,
+  pattern = "^MT-"
+)
 
 VlnPlot(
-  breast,
-  features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
+  seurat_obj,
+  features = c("nFeature_RNA","nCount_RNA","percent.mt"),
   ncol = 3
 )
 
-# ==============================
-# 5. Quality Control Filtering
-# ==============================
+########################################
+# 4. Filter low-quality cells
+########################################
 
-breast <- subset(
-  breast,
-  subset = nFeature_RNA > 200 &
-           nFeature_RNA < 6000 &
-           percent.mt < 10
+seurat_obj <- subset(
+  seurat_obj,
+  subset =
+    nFeature_RNA > 200 &
+    nFeature_RNA < 6000 &
+    percent.mt < 10
 )
 
-# ==============================
-# 6. Data Normalization
-# ==============================
+########################################
+# 5. Normalize data
+########################################
 
-breast <- NormalizeData(
-  breast,
+seurat_obj <- NormalizeData(
+  seurat_obj,
   normalization.method = "LogNormalize",
   scale.factor = 10000
 )
 
-# ==============================
-# 7. Identification of Highly Variable Genes
-# ==============================
+########################################
+# 6. Identify highly variable genes
+########################################
 
-breast <- FindVariableFeatures(
-  breast,
+seurat_obj <- FindVariableFeatures(
+  seurat_obj,
   selection.method = "vst",
   nfeatures = 2000
 )
 
-VariableFeaturePlot(breast)
+VariableFeaturePlot(seurat_obj)
 
-# ==============================
-# 8. Data Scaling
-# ==============================
+########################################
+# 7. Data scaling
+########################################
 
-all.genes <- rownames(breast)
+seurat_obj <- ScaleData(seurat_obj)
 
-breast <- ScaleData(
-  breast,
-  features = all.genes
+########################################
+# 8. Principal Component Analysis
+########################################
+
+seurat_obj <- RunPCA(
+  seurat_obj,
+  features = VariableFeatures(seurat_obj)
 )
 
-# ==============================
-# 9. Principal Component Analysis
-# ==============================
+ElbowPlot(seurat_obj)
 
-breast <- RunPCA(
-  breast,
-  features = VariableFeatures(object = breast)
+########################################
+# 9. Cell clustering
+########################################
+
+seurat_obj <- FindNeighbors(
+  seurat_obj,
+  dims = 1:15
 )
 
-ElbowPlot(breast)
-
-# ==============================
-# 10. Cell Clustering
-# ==============================
-
-breast <- FindNeighbors(
-  breast,
-  dims = 1:10
-)
-
-breast <- FindClusters(
-  breast,
+seurat_obj <- FindClusters(
+  seurat_obj,
   resolution = 0.5
 )
 
-# ==============================
-# 11. UMAP Dimensional Reduction
-# ==============================
+########################################
+# 10. UMAP dimensional reduction
+########################################
 
-breast <- RunUMAP(
-  breast,
-  dims = 1:10
+seurat_obj <- RunUMAP(
+  seurat_obj,
+  dims = 1:15
 )
 
 DimPlot(
-  breast,
+  seurat_obj,
   reduction = "umap",
-  label = TRUE
+  label = TRUE,
+  repel = TRUE
 )
 
-# ==============================
-# 12. Marker Gene Identification
-# ==============================
+########################################
+# 11. Identify marker genes
+########################################
 
 markers <- FindAllMarkers(
-  breast,
+  seurat_obj,
   only.pos = TRUE,
   min.pct = 0.25,
   logfc.threshold = 0.25
@@ -141,59 +130,57 @@ markers <- FindAllMarkers(
 
 head(markers)
 
-# ==============================
-# 13. Top Marker Genes per Cluster
-# ==============================
+########################################
+# 12. Select top marker genes per cluster
+########################################
 
-top10 <- markers %>%
+top_genes <- markers %>%
   group_by(cluster) %>%
-  top_n(n = 10, wt = avg_log2FC)
+  slice_max(avg_log2FC, n = 2)
 
-# ==============================
-# 14. DotPlot Visualization
-# ==============================
+########################################
+# 13. FeaturePlot (gene expression on UMAP)
+########################################
 
-DotPlot(
-  breast,
-  features = c(
-    "VCAN-AS1",
-    "AC139720.1",
-    "PDGFD",
-    "NRCAM",
-    "ABCB4",
-    "AC020651.2",
-    "AL136018.1"
-  )
-) + RotatedAxis()
-
-# ==============================
-# 15. Heatmap Visualization
-# ==============================
-
-DoHeatmap(
-  breast,
-  features = top10$gene
-) + NoLegend()
-
-# ==============================
-# 16. Cluster Composition Plot
-# ==============================
-
-table(Idents(breast))
-
-DimPlot(
-  breast,
-  reduction = "umap",
-  group.by = "seurat_clusters"
+FeaturePlot(
+  seurat_obj,
+  features = unique(top_genes$gene),
+  reduction = "umap"
 )
 
-# ==============================
-# 17. Save Results
-# ==============================
+########################################
+# 14. DotPlot of marker genes
+########################################
 
-write.csv(markers, "marker_genes_GSE131907.csv")
+DotPlot(
+  seurat_obj,
+  features = unique(top_genes$gene)
+) + RotatedAxis()
 
-ggsave("UMAP_clusters.png")
-ggsave("DotPlot_marker_genes.png")
+########################################
+# 15. Heatmap of marker genes
+########################################
 
-saveRDS(breast, file = "seurat_object_GSE131907.rds")
+DoHeatmap(
+  seurat_obj,
+  features = unique(top_genes$gene)
+)
+
+########################################
+# 16. Cluster composition plot
+########################################
+
+cluster_counts <- table(Idents(seurat_obj))
+
+cluster_df <- as.data.frame(cluster_counts)
+colnames(cluster_df) <- c("Cluster","Cell_Count")
+
+ggplot(cluster_df, aes(x = Cluster, y = Cell_Count, fill = Cluster)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = Cell_Count), vjust = -0.3) +
+  theme_classic() +
+  labs(
+    title = "Cell Distribution Across Clusters",
+    x = "Cluster",
+    y = "Number of Cells"
+  )
