@@ -1,0 +1,31 @@
+Dataset Source
+
+Dataset used in this project:
+
+GSE131907 – Breast Cancer Single-Cell RNA Sequencing Dataset
+
+Source:
+NCBI Gene Expression Omnibus (GEO)
+
+Download Link:
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE131907
+
+Description:
+This dataset contains single-cell RNA sequencing profiles derived from breast cancer tissue samples. It enables the exploration of transcriptional heterogeneity and cellular composition within the tumor microenvironment.
+
+Instructions to Obtain Raw Data:
+
+1. Visit the GEO dataset page using the link above.
+2. Download the raw count matrix files.
+3. Extract the downloaded files.
+4. Place the extracted files in the following directory:
+
+data/raw/
+
+Expected files:
+
+barcodes.tsv.gz
+features.tsv.gz
+matrix.mtx.gz
+
+These files can then be loaded in R using the Seurat Read10X() function.
